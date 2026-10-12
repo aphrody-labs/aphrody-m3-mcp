@@ -2,18 +2,31 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
 
-export const ROOT = join(import.meta.dir, "../../..");
+/** Resolve the M3 source root without assuming a particular checkout layout. */
+const roots = [
+  process.env.APHRODY_M3_ROOT,
+  resolve(process.cwd(), "m3"),
+  resolve(import.meta.dir, "../aphrody-m3"),
+].filter((root): root is string => !!root);
+export const ROOT = roots.find((root) => existsSync(join(root, "packages/m3-tokens"))) ?? roots[0]!;
 
 const read = (p: string) => (existsSync(p) ? readFileSync(p, "utf8") : "");
 
 export function listPackages(root = ROOT): string[] {
   const dir = join(root, "packages");
-  return readdirSync(dir).flatMap((d) => {
+  const packages = readdirSync(dir).flatMap((d) => {
     const p = join(dir, d, "package.json");
     if (!existsSync(p)) return [];
     const j = JSON.parse(readFileSync(p, "utf8"));
     return [`${j.name}@${j.version ?? "0.0.0"}  packages/${d}`];
   });
+  const own = join(import.meta.dir, "../package.json");
+  if (existsSync(own)) {
+    const j = JSON.parse(readFileSync(own, "utf8"));
+    const entry = `${j.name}@${j.version ?? "0.0.0"}  external/${j.name}`;
+    if (!packages.some((p) => p.startsWith(`${j.name}@`))) packages.push(entry);
+  }
+  return packages;
 }
 
 export interface Token {
